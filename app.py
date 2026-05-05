@@ -317,8 +317,9 @@ def resolve_source_value(df: pd.DataFrame, source, default: float = 5.0) -> floa
 
 
 def score_to_axis_length(score: float) -> float:
-    # Keeps bars comfortably within chart box
-    return (clamp_score(score) / 10.0) * 6.4
+    # Score is mapped proportionally to the chart axis.
+    # 4 = 40%, 8 = 80%, 10 = full axis length.
+    return (clamp_score(score) / 10.0) * 8.0
 
 
 def draw_quadrant_chart(
@@ -333,15 +334,18 @@ def draw_quadrant_chart(
     title,
     filename,
 ):
-    fig, ax = plt.subplots(figsize=(4.2, 4.6))
-    ax.set_xlim(-10.5, 10.5)
-    ax.set_ylim(-12.0, 12.5)
+    fig, ax = plt.subplots(figsize=(5.0, 5.4))
+    ax.set_xlim(-8.5, 8.5)
+    ax.set_ylim(-10.5, 12)
     ax.axis("off")
     fig.patch.set_facecolor("white")
 
     # Title band
-    ax.add_patch(Rectangle((-8.7, 9.5), 17.4, 1.8, facecolor="#2F67B2", edgecolor="none"))
-    ax.text(0, 10.4, title, ha="center", va="center", color="white", fontsize=12, fontweight="bold")
+    ax.add_patch(Rectangle((-8.7, 9.2), 17.4, 2.4, facecolor="#2F67B2", edgecolor="none"))
+
+    ax.text(0, 10.25, title,
+            ha="center", va="center",
+            color="white", fontsize=13, fontweight="bold")
 
     # Main box
     ax.add_patch(Rectangle((-8.0, -8.0), 16.0, 16.0, facecolor="white", edgecolor="black", linewidth=1.2))
@@ -350,8 +354,8 @@ def draw_quadrant_chart(
     ax.plot([-8.0, 8.0], [0, 0], color="black", linewidth=1.0, zorder=1)
     ax.plot([0, 0], [-8.0, 8.0], color="black", linewidth=1.0, zorder=1)
 
-    bar_color = "#8CD4E8"
-    edge_color = "#2F67B2"
+    bar_color = "black"
+    edge_color = "black"
 
     lt = score_to_axis_length(left_value)
     rt = score_to_axis_length(right_value)
@@ -359,30 +363,50 @@ def draw_quadrant_chart(
     bt = score_to_axis_length(bottom_value)
 
     # Bars
-    ax.plot([-lt, 0], [0, 0], linewidth=10, solid_capstyle="butt", color=bar_color, zorder=3)
-    ax.plot([0, rt], [0, 0], linewidth=10, solid_capstyle="butt", color=bar_color, zorder=3)
-    ax.plot([0, 0], [0, tp], linewidth=10, solid_capstyle="butt", color=bar_color, zorder=3)
-    ax.plot([0, 0], [-bt, 0], linewidth=10, solid_capstyle="butt", color=bar_color, zorder=3)
+    ax.plot([-lt, 0], [0, 0], linewidth=15, solid_capstyle="butt", color=bar_color, zorder=3)
+    ax.plot([0, rt], [0, 0], linewidth=15, solid_capstyle="butt", color=bar_color, zorder=3)
+    ax.plot([0, 0], [0, tp], linewidth=15, solid_capstyle="butt", color=bar_color, zorder=3)
+    ax.plot([0, 0], [-bt, 0], linewidth=15, solid_capstyle="butt", color=bar_color, zorder=3)
 
     ax.plot([-lt, 0], [0, 0], linewidth=2.2, solid_capstyle="butt", color=edge_color, zorder=4)
     ax.plot([0, rt], [0, 0], linewidth=2.2, solid_capstyle="butt", color=edge_color, zorder=4)
     ax.plot([0, 0], [0, tp], linewidth=2.2, solid_capstyle="butt", color=edge_color, zorder=4)
     ax.plot([0, 0], [-bt, 0], linewidth=2.2, solid_capstyle="butt", color=edge_color, zorder=4)
 
-    # Value labels
-    ax.text(-lt / 2 if lt > 0 else -0.2, 0.35, f"{round(left_value):.0f}", ha="center", va="center", fontsize=10, fontweight="bold")
-    ax.text(rt / 2 if rt > 0 else 0.2, 0.35, f"{round(right_value):.0f}", ha="center", va="center", fontsize=10, fontweight="bold")
-    ax.text(0.35, tp / 2 if tp > 0 else 0.2, f"{round(top_value):.0f}", ha="center", va="center", fontsize=10, fontweight="bold")
-    ax.text(0.35, -bt / 2 if bt > 0 else -0.2, f"{round(bottom_value):.0f}", ha="center", va="center", fontsize=10, fontweight="bold")
+    # Value labels (moved OUTSIDE bars + bigger + on top)
+    offset = 0.5
+    axis_gap = 0.35
 
-    # Axis labels
-    ax.text(0, 8.7, top_label, ha="center", va="center", fontsize=10)
-    ax.text(8.9, 0, right_label, ha="center", va="center", fontsize=10, rotation=270)
-    ax.text(0, -9.0, bottom_label, ha="center", va="center", fontsize=10)
-    ax.text(-8.9, 0, left_label, ha="center", va="center", fontsize=10, rotation=90)
+    # Left
+    ax.text(-lt - offset, axis_gap, f"{round(left_value):.0f}",
+            ha="right", va="center", fontsize=12, fontweight="bold", zorder=5)
+
+    # Right
+    ax.text(rt + offset, axis_gap, f"{round(right_value):.0f}",
+            ha="left", va="center", fontsize=12, fontweight="bold", zorder=5)
+
+    # Top
+    ax.text(axis_gap, tp + offset, f"{round(top_value):.0f}",
+            ha="center", va="bottom", fontsize=12, fontweight="bold", zorder=5)
+
+    # Bottom
+    ax.text(axis_gap, -bt - offset, f"{round(bottom_value):.0f}",
+            ha="center", va="top", fontsize=12, fontweight="bold", zorder=5)
+
+    # Axis labels (pushed outward slightly)
+    ax.text(0, 8.6, top_label, ha="center", va="center", fontsize=10)
+
+    ax.text(9.4, 0, right_label,
+            ha="center", va="center", fontsize=10, rotation=270)
+
+    ax.text(0, -9.5, bottom_label,
+            ha="center", va="center", fontsize=10)
+
+    ax.text(-9.4, 0, left_label,
+            ha="center", va="center", fontsize=10, rotation=90)
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=180, bbox_inches="tight")
+    plt.savefig(filename, dpi=220, bbox_inches="tight")
     plt.close()
 
 
@@ -620,10 +644,10 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
 
     rows = []
     for i in range(0, len(chart_files), 3):
-        row = [Image(chart_files[i + j], width=150, height=165) for j in range(3)]
+        row = [Image(chart_files[i + j], width=190, height=210) for j in range(3)]
         rows.append(row)
 
-    chart_table = Table(rows, colWidths=[170, 170, 170])
+    chart_table = Table(rows, colWidths=[190, 190, 190])
     chart_table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
