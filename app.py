@@ -5,6 +5,8 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
+st.set_page_config(page_title="Personality Profiling (PP)", layout="wide")
+
 # PDF
 from reportlab.platypus import (
     SimpleDocTemplate,
@@ -587,7 +589,7 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
     content = []
     display_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
 
-    content.append(Paragraph("RE HI Report", report_title_style))
+    content.append(Paragraph("Personality Profiling (PP)", report_title_style))
     content.append(Paragraph(display_name, name_style))
     content.append(Paragraph(f"Report Date: {datetime.today().strftime('%d %b %Y')}", date_style))
 
@@ -683,7 +685,7 @@ def style_regular_dataframe(sub: pd.DataFrame):
 # =========================
 # UI
 # =========================
-st.title("HI Prediction Tool")
+st.title("Personality Profiling (PP)")
 
 candidate_name = st.text_input("Enter Candidate Name")
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
