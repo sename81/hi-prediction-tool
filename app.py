@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import pickle
 from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
@@ -32,6 +34,9 @@ if "report_df" not in st.session_state:
 
 if "report_name" not in st.session_state:
     st.session_state.report_name = ""
+
+if "chart_bytes" not in st.session_state:
+    st.session_state.chart_bytes = []
 
 # =========================
 # LOAD MODELS
@@ -412,12 +417,13 @@ def draw_quadrant_chart(
     plt.close()
 
 
-def generate_all_charts(df: pd.DataFrame):
-    print("START charts", flush=True)
+def generate_all_charts(df: pd.DataFrame, output_dir: str):
     chart_files = []
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     for i, chart in enumerate(CHART_DEFINITIONS):
-        filename = f"chart_{i}.png"
+        filename = output_path / f"chart_{i}.png"
 
         top_value = resolve_source_value(df, chart["top_source"])
         right_value = resolve_source_value(df, chart["right_source"])
@@ -434,12 +440,11 @@ def generate_all_charts(df: pd.DataFrame):
             bottom_label=chart["bottom_label"],
             left_label=chart["left_label"],
             title=chart["title"],
-            filename=filename,
+            filename=str(filename),
         )
 
-        chart_files.append(filename)
+        chart_files.append(str(filename))
 
-    print("END charts", flush=True)
     return chart_files
 
 
@@ -540,13 +545,14 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
-    chart_files = generate_all_charts(df)
-
-    print("START PDF setup", flush=True)
-
+def generate_pdf(
+    df: pd.DataFrame,
+    candidate_name: str,
+    chart_files,
+    pdf_path: str,
+) -> str:
     doc = SimpleDocTemplate(
-        "report.pdf",
+        pdf_path,
         rightMargin=36,
         leftMargin=36,
         topMargin=36,
@@ -656,16 +662,10 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
     content.append(Paragraph("Main Graph and Narrative", report_title_style))
     content.append(Spacer(1, 8))
 
-    print("START PDF chart images", flush=True)
-
     rows = []
     for i in range(0, len(chart_files), 3):
-        print(f"START PDF chart row {i // 3 + 1}", flush=True)
         row = [Image(chart_files[i + j], width=190, height=210) for j in range(3)]
         rows.append(row)
-        print(f"END PDF chart row {i // 3 + 1}", flush=True)
-
-    print("END PDF chart images", flush=True)
 
     chart_table = Table(rows, colWidths=[190, 190, 190])
     chart_table.setStyle(TableStyle([
@@ -675,11 +675,8 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
 
     content.append(chart_table)
 
-    print("START PDF build", flush=True)
     doc.build(content, onFirstPage=add_page_number, onLaterPages=add_page_number)
-    print("END PDF build", flush=True)
-
-    return "report.pdf"
+    return pdf_path
 
 
 def style_traits_dataframe(sub: pd.DataFrame):
@@ -728,17 +725,31 @@ if uploaded_file is not None and st.button("Generate"):
     
     report_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
 
-    pdf_file = generate_pdf(report_df, report_name)
+    with TemporaryDirectory() as temp_dir:
+        chart_files = generate_all_charts(report_df, temp_dir)
 
-    print("START PDF read", flush=True)
-    with open(pdf_file, "rb") as f:
-        st.session_state.pdf_bytes = f.read()
-    print("END PDF read", flush=True)
+        # Read chart images into memory once so Streamlit can display them
+        # without regenerating or sharing filenames across reruns.
+        chart_bytes = []
+        for chart_file in chart_files:
+            with open(chart_file, "rb") as f:
+                chart_bytes.append(f.read())
 
-    print("START session state save", flush=True)
+        pdf_path = str(Path(temp_dir) / "report.pdf")
+        pdf_file = generate_pdf(
+            report_df,
+            report_name,
+            chart_files,
+            pdf_path,
+        )
+
+        with open(pdf_file, "rb") as f:
+            pdf_bytes = f.read()
+
+    st.session_state.pdf_bytes = pdf_bytes
+    st.session_state.chart_bytes = chart_bytes
     st.session_state.report_df = report_df
     st.session_state.report_name = report_name
-    print("END session state save", flush=True)
 
 # =========================
 # DISPLAY LAST RESULT
@@ -750,8 +761,6 @@ if st.session_state.report_df is not None:
     st.subheader(f"Results for {display_name}")
 
     for section in SECTION_ORDER:
-        print(f"START display table: {section}", flush=True)
-
         sub = df[df["Section"] == section].copy().sort_values("Score", ascending=False)
         sub["Score"] = sub["Score"].map(lambda x: f"{x:.1f}")
 
@@ -762,18 +771,15 @@ if st.session_state.report_df is not None:
         else:
             st.dataframe(style_regular_dataframe(sub), use_container_width=True)
 
-        print(f"END display table: {section}", flush=True)
-
     st.markdown("### Main Graph and Narrative")
-    print("START display charts", flush=True)
-    chart_files = generate_all_charts(df)
-    print("END display charts", flush=True)
 
-    for row_start in range(0, len(chart_files), 3):
+    for row_start in range(0, len(st.session_state.chart_bytes), 3):
         cols = st.columns(3)
-        for i, chart_file in enumerate(chart_files[row_start:row_start + 3]):
+        for i, chart_image in enumerate(
+            st.session_state.chart_bytes[row_start:row_start + 3]
+        ):
             with cols[i]:
-                st.image(chart_file, use_container_width=True)
+                st.image(chart_image, use_container_width=True)
 
 # =========================
 # DOWNLOAD BUTTON (BOTTOM)
