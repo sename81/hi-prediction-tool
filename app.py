@@ -543,6 +543,8 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
 def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
     chart_files = generate_all_charts(df)
 
+    print("START PDF setup", flush=True)
+
     doc = SimpleDocTemplate(
         "report.pdf",
         rightMargin=36,
@@ -654,10 +656,16 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
     content.append(Paragraph("Main Graph and Narrative", report_title_style))
     content.append(Spacer(1, 8))
 
+    print("START PDF chart images", flush=True)
+
     rows = []
     for i in range(0, len(chart_files), 3):
+        print(f"START PDF chart row {i // 3 + 1}", flush=True)
         row = [Image(chart_files[i + j], width=190, height=210) for j in range(3)]
         rows.append(row)
+        print(f"END PDF chart row {i // 3 + 1}", flush=True)
+
+    print("END PDF chart images", flush=True)
 
     chart_table = Table(rows, colWidths=[190, 190, 190])
     chart_table.setStyle(TableStyle([
@@ -667,7 +675,10 @@ def generate_pdf(df: pd.DataFrame, candidate_name: str) -> str:
 
     content.append(chart_table)
 
+    print("START PDF build", flush=True)
     doc.build(content, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    print("END PDF build", flush=True)
+
     return "report.pdf"
 
 
@@ -718,8 +729,11 @@ if uploaded_file is not None and st.button("Generate"):
     report_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
 
     pdf_file = generate_pdf(report_df, report_name)
+
+    print("START PDF read", flush=True)
     with open(pdf_file, "rb") as f:
         st.session_state.pdf_bytes = f.read()
+    print("END PDF read", flush=True)
 
     st.session_state.report_df = report_df
     st.session_state.report_name = report_name
@@ -745,7 +759,9 @@ if st.session_state.report_df is not None:
             st.dataframe(style_regular_dataframe(sub), use_container_width=True)
 
     st.markdown("### Main Graph and Narrative")
+    print("START display charts", flush=True)
     chart_files = generate_all_charts(df)
+    print("END display charts", flush=True)
 
     for row_start in range(0, len(chart_files), 3):
         cols = st.columns(3)
