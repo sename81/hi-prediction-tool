@@ -14,8 +14,11 @@ import pickle
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from html import escape
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+
+APP_VERSION = "1.0.0"
 
 st.set_page_config(page_title="Personality Profiling (PP)", layout="wide")
 
@@ -137,23 +140,6 @@ SECTION_ORDER = [
     "Functions",
 ]
 
-BEHAVIORAL_COLUMNS = [
-    "Organizational Compatibility",
-    "Handles Conflict",
-    "Coaching",
-    "People Oriented",
-    "Innovative",
-    "Interpersonal Skills",
-    "Handles Autonomy",
-    "Provides Direction",
-    "Receives Correction",
-    "Doesn't Need Structure",
-    "Tolerance Of Evasiveness",
-    "Negotiating",
-    "Effective Enforcing",
-    "Judgment (strategic)",
-    "Self-Employed",
-]
 
 INTEREST_MAP = {
     "Writing / language": "Writing or language",
@@ -481,12 +467,9 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     X_input = pd.DataFrame([df_input["score"].tolist()], columns=feature_names)
     employment_values = df_input["score"].iloc[-10:].tolist()
 
-    print("START traits", flush=True)
     results = {}
     for col, model in models.items():
-        print(f"Predicting trait: {col}", flush=True)
         results[col] = float(model.predict(X_input)[0])
-    print("END traits", flush=True)
 
     df = pd.DataFrame(list(results.items()), columns=["Trait", "Score"])
 
@@ -532,7 +515,6 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     trait_scores = dict(zip(df["Trait Name"], df["Score"]))
     trait_vector = [trait_scores.get(t, 5.0) for t in trait_columns]
 
-    print("START behavioural", flush=True)
     # Behavioral boosting
     for idx, row in df.iterrows():
         if row["Section"] == "Behavioral Competencies":
@@ -555,9 +537,7 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
                 behavior_score = 5 + (raw_behavior - 5) * 1.5
 
                 df.at[idx, "Score"] = clamp_score(0.5 * base_score + 0.5 * behavior_score)
-    print("END behavioural", flush=True)
 
-    print("START functions", flush=True)
     # Functions
     function_rows = []
     for fname, model in function_models.items():
@@ -577,7 +557,6 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
             "Score": round(fscore, 1),
         })
 
-    print("END functions", flush=True)
 
     df = df[df["Section"] != "Functions"]
     df = pd.concat([df, pd.DataFrame(function_rows)], ignore_index=True)
@@ -722,25 +701,38 @@ def generate_pdf(
     return pdf_path
 
 
-def style_traits_dataframe(sub: pd.DataFrame):
-    top_idx = sub.head(5).index
-    bottom_idx = sub.tail(5).index
+def build_web_table(sub: pd.DataFrame, highlight_traits: bool = False) -> str:
+    """Build a stable HTML table without Streamlit dataframe/PyArrow rendering."""
+    rows = []
+    total_rows = len(sub)
 
-    def row_style(row):
-        if row.name in top_idx:
-            return ["background-color:#e6e6e6; font-weight:bold;", "background-color:#e6e6e6; font-weight:bold; text-align:center;"]
-        if row.name in bottom_idx:
-            return ["background-color:#fdecea;", "background-color:#fdecea; text-align:center;"]
-        return ["", "text-align:center;"]
+    for position, (_, row) in enumerate(sub.iterrows()):
+        row_class = ""
 
-    styler = sub[["Trait Name", "Score"]].style.apply(row_style, axis=1)
-    styler = styler.set_properties(subset=["Score"], **{"text-align": "center"})
-    return styler
+        if highlight_traits:
+            if position < 5:
+                row_class = ' class="top-trait"'
+            elif position >= max(0, total_rows - 5):
+                row_class = ' class="bottom-trait"'
 
+        trait_name = escape(str(row["Trait Name"]))
+        score = escape(f'{float(row["Score"]):.1f}')
 
-def style_regular_dataframe(sub: pd.DataFrame):
-    styler = sub[["Trait Name", "Score"]].style.set_properties(subset=["Score"], **{"text-align": "center"})
-    return styler
+        rows.append(
+            f"<tr{row_class}>"
+            f"<td>{trait_name}</td>"
+            f"<td class=\"score-cell\">{score}</td>"
+            f"</tr>"
+        )
+
+    return (
+        '<div class="hi-table-wrap">'
+        '<table class="hi-table">'
+        "<thead><tr><th>Trait</th><th>Score</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</div>"
+    )
 
 
 # =========================
@@ -749,25 +741,53 @@ def style_regular_dataframe(sub: pd.DataFrame):
 st.markdown(
     """
     <style>
-    table.hi-table {
+    .hi-table-wrap {
         width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 1rem;
+        overflow-x: auto;
+        margin: 0 0 1.25rem 0;
     }
+
+    table.hi-table {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        border-collapse: collapse;
+        table-layout: fixed;
+        background: white;
+    }
+
     table.hi-table th,
     table.hi-table td {
-        border: 1px solid #d0d0d0;
-        padding: 0.45rem 0.6rem;
+        border: 1px solid #c9c9c9;
+        padding: 0.55rem 0.75rem;
+        vertical-align: middle;
     }
+
     table.hi-table th {
         background: #808080;
         color: white;
+        font-weight: 700;
         text-align: left;
     }
-    table.hi-table td:last-child,
-    table.hi-table th:last-child {
+
+    table.hi-table th:last-child,
+    table.hi-table td.score-cell {
+        width: 110px;
         text-align: center;
-        width: 90px;
+    }
+
+    table.hi-table tbody tr.top-trait td {
+        background: #e6e6e6;
+        font-weight: 700;
+    }
+
+    table.hi-table tbody tr.bottom-trait td {
+        background: #fdecea;
+    }
+
+    @media (max-width: 800px) {
+        table.hi-table {
+            width: 100%;
+        }
     }
     </style>
     """,
@@ -796,12 +816,9 @@ if uploaded_file is not None and st.button("Generate"):
     
     report_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
 
-    print("START one-pass report generation", flush=True)
 
     with TemporaryDirectory() as temp_dir:
-        print("START charts", flush=True)
         chart_files = generate_all_charts(report_df, temp_dir)
-        print("END charts", flush=True)
 
         # Read chart images into memory once so Streamlit can display them
         # without regenerating or sharing filenames across reruns.
@@ -811,19 +828,16 @@ if uploaded_file is not None and st.button("Generate"):
                 chart_bytes.append(f.read())
 
         pdf_path = str(Path(temp_dir) / "report.pdf")
-        print("START PDF", flush=True)
         pdf_file = generate_pdf(
             report_df,
             report_name,
             chart_files,
             pdf_path,
         )
-        print("END PDF", flush=True)
 
         with open(pdf_file, "rb") as f:
             pdf_bytes = f.read()
 
-    print("END one-pass report generation", flush=True)
 
     st.session_state.pdf_bytes = pdf_bytes
     st.session_state.chart_bytes = chart_bytes
@@ -840,55 +854,17 @@ if st.session_state.report_records is not None:
     st.subheader(f"Results for {display_name}")
 
     for section in SECTION_ORDER:
-        print(f"START render section: {section}", flush=True)
-
         sub = df[df["Section"] == section].copy().sort_values(
             "Score",
             ascending=False,
         )
-        sub["Score"] = sub["Score"].map(lambda x: f"{x:.1f}")
 
         st.markdown(f"### {section}")
-
-        display_sub = sub[["Trait Name", "Score"]].copy()
-        display_sub.columns = ["Trait", "Score"]
-
-        if section == "Traits":
-            trait_count = len(display_sub)
-
-            def style_trait_row(row):
-                row_position = display_sub.index.get_loc(row.name)
-
-                if row_position < 5:
-                    return [
-                        "background-color:#e6e6e6;font-weight:bold;",
-                        "background-color:#e6e6e6;font-weight:bold;text-align:center;",
-                    ]
-
-                if row_position >= max(0, trait_count - 5):
-                    return [
-                        "background-color:#fdecea;",
-                        "background-color:#fdecea;text-align:center;",
-                    ]
-
-                return ["", "text-align:center;"]
-
-            table_html = (
-                display_sub.style
-                .apply(style_trait_row, axis=1)
-                .hide(axis="index")
-                .to_html()
-            )
-        else:
-            table_html = display_sub.to_html(
-                index=False,
-                escape=True,
-                classes="hi-table",
-            )
-
+        table_html = build_web_table(
+            sub,
+            highlight_traits=(section == "Traits"),
+        )
         st.markdown(table_html, unsafe_allow_html=True)
-
-        print(f"END render section: {section}", flush=True)
 
     st.markdown("### Main Graph and Narrative")
 
