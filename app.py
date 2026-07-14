@@ -1,3 +1,13 @@
+import os
+
+# Limit native numerical libraries to one thread.
+# This reduces OpenMP/BLAS thread contention and native crashes in hosted environments.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+
 import streamlit as st
 import pandas as pd
 import pickle
@@ -41,17 +51,29 @@ if "chart_bytes" not in st.session_state:
 # =========================
 # LOAD MODELS
 # =========================
-with open("hi_model.pkl", "rb") as f:
-    models = pickle.load(f)
+@st.cache_resource
+def load_models():
+    with open("hi_model.pkl", "rb") as f:
+        loaded_models = pickle.load(f)
 
-with open("feature_names.pkl", "rb") as f:
-    feature_names = pickle.load(f)
+    with open("feature_names.pkl", "rb") as f:
+        loaded_feature_names = pickle.load(f)
 
-with open("function_models.pkl", "rb") as f:
-    function_models = pickle.load(f)
+    with open("function_models.pkl", "rb") as f:
+        loaded_function_models = pickle.load(f)
 
-with open("behavioral_models.pkl", "rb") as f:
-    behavioral_models = pickle.load(f)
+    with open("behavioral_models.pkl", "rb") as f:
+        loaded_behavioral_models = pickle.load(f)
+
+    return (
+        loaded_models,
+        loaded_feature_names,
+        loaded_function_models,
+        loaded_behavioral_models,
+    )
+
+
+models, feature_names, function_models, behavioral_models = load_models()
 
 # =========================
 # CONFIG
@@ -518,7 +540,18 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
             if name in behavioral_models:
                 base_score = df.at[idx, "Score"]
 
-                raw_behavior = behavioral_models[name].predict([trait_vector])[0]
+                behavior_model = behavioral_models[name]
+                behavior_columns = getattr(
+                    behavior_model,
+                    "feature_names_in_",
+                    trait_columns,
+                )
+                behavior_input = pd.DataFrame(
+                    [trait_vector],
+                    columns=behavior_columns,
+                )
+
+                raw_behavior = behavior_model.predict(behavior_input)[0]
                 behavior_score = 5 + (raw_behavior - 5) * 1.5
 
                 df.at[idx, "Score"] = clamp_score(0.5 * base_score + 0.5 * behavior_score)
@@ -528,7 +561,17 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     # Functions
     function_rows = []
     for fname, model in function_models.items():
-        fscore = clamp_score(model.predict([trait_vector])[0])
+        function_columns = getattr(
+            model,
+            "feature_names_in_",
+            trait_columns,
+        )
+        function_input = pd.DataFrame(
+            [trait_vector],
+            columns=function_columns,
+        )
+
+        fscore = clamp_score(model.predict(function_input)[0])
         function_rows.append({
             "Trait": f"Functions | {fname}",
             "Score": round(fscore, 1),
@@ -725,8 +768,12 @@ if uploaded_file is not None and st.button("Generate"):
     
     report_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
 
+    print("START one-pass report generation", flush=True)
+
     with TemporaryDirectory() as temp_dir:
+        print("START charts", flush=True)
         chart_files = generate_all_charts(report_df, temp_dir)
+        print("END charts", flush=True)
 
         # Read chart images into memory once so Streamlit can display them
         # without regenerating or sharing filenames across reruns.
@@ -736,15 +783,19 @@ if uploaded_file is not None and st.button("Generate"):
                 chart_bytes.append(f.read())
 
         pdf_path = str(Path(temp_dir) / "report.pdf")
+        print("START PDF", flush=True)
         pdf_file = generate_pdf(
             report_df,
             report_name,
             chart_files,
             pdf_path,
         )
+        print("END PDF", flush=True)
 
         with open(pdf_file, "rb") as f:
             pdf_bytes = f.read()
+
+    print("END one-pass report generation", flush=True)
 
     st.session_state.pdf_bytes = pdf_bytes
     st.session_state.chart_bytes = chart_bytes
