@@ -413,6 +413,7 @@ def draw_quadrant_chart(
 
 
 def generate_all_charts(df: pd.DataFrame):
+    print("START charts", flush=True)
     chart_files = []
 
     for i, chart in enumerate(CHART_DEFINITIONS):
@@ -438,6 +439,7 @@ def generate_all_charts(df: pd.DataFrame):
 
         chart_files.append(filename)
 
+    print("END charts", flush=True)
     return chart_files
 
 
@@ -452,9 +454,12 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     X_input = pd.DataFrame([df_input["score"].tolist()], columns=feature_names)
     employment_values = df_input["score"].iloc[-10:].tolist()
 
+    print("START traits", flush=True)
     results = {}
     for col, model in models.items():
+        print(f"Predicting trait: {col}", flush=True)
         results[col] = float(model.predict(X_input)[0])
+    print("END traits", flush=True)
 
     df = pd.DataFrame(list(results.items()), columns=["Trait", "Score"])
 
@@ -500,6 +505,7 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
     trait_scores = dict(zip(df["Trait Name"], df["Score"]))
     trait_vector = [trait_scores.get(t, 5.0) for t in trait_columns]
 
+    print("START behavioural", flush=True)
     # Behavioral boosting
     for idx, row in df.iterrows():
         if row["Section"] == "Behavioral Competencies":
@@ -511,7 +517,9 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
                 behavior_score = 5 + (raw_behavior - 5) * 1.5
 
                 df.at[idx, "Score"] = clamp_score(0.5 * base_score + 0.5 * behavior_score)
+    print("END behavioural", flush=True)
 
+    print("START functions", flush=True)
     # Functions
     function_rows = []
     for fname, model in function_models.items():
@@ -520,6 +528,8 @@ def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
             "Trait": f"Functions | {fname}",
             "Score": round(fscore, 1),
         })
+
+    print("END functions", flush=True)
 
     df = df[df["Section"] != "Functions"]
     df = pd.concat([df, pd.DataFrame(function_rows)], ignore_index=True)
