@@ -39,8 +39,8 @@ from reportlab.lib.enums import TA_CENTER
 if "pdf_bytes" not in st.session_state:
     st.session_state.pdf_bytes = None
 
-if "report_df" not in st.session_state:
-    st.session_state.report_df = None
+if "report_records" not in st.session_state:
+    st.session_state.report_records = None
 
 if "report_name" not in st.session_state:
     st.session_state.report_name = ""
@@ -746,6 +746,34 @@ def style_regular_dataframe(sub: pd.DataFrame):
 # =========================
 # UI
 # =========================
+st.markdown(
+    """
+    <style>
+    table.hi-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+    }
+    table.hi-table th,
+    table.hi-table td {
+        border: 1px solid #d0d0d0;
+        padding: 0.45rem 0.6rem;
+    }
+    table.hi-table th {
+        background: #808080;
+        color: white;
+        text-align: left;
+    }
+    table.hi-table td:last-child,
+    table.hi-table th:last-child {
+        text-align: center;
+        width: 90px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("Personality Profiling (PP)")
 
 candidate_name = st.text_input("Enter Candidate Name")
@@ -799,28 +827,68 @@ if uploaded_file is not None and st.button("Generate"):
 
     st.session_state.pdf_bytes = pdf_bytes
     st.session_state.chart_bytes = chart_bytes
-    st.session_state.report_df = report_df
+    st.session_state.report_records = report_df.to_dict("records")
     st.session_state.report_name = report_name
 
 # =========================
 # DISPLAY LAST RESULT
 # =========================
-if st.session_state.report_df is not None:
-    df = st.session_state.report_df.copy()
+if st.session_state.report_records is not None:
+    df = pd.DataFrame(st.session_state.report_records)
     display_name = st.session_state.report_name
 
     st.subheader(f"Results for {display_name}")
 
     for section in SECTION_ORDER:
-        sub = df[df["Section"] == section].copy().sort_values("Score", ascending=False)
+        print(f"START render section: {section}", flush=True)
+
+        sub = df[df["Section"] == section].copy().sort_values(
+            "Score",
+            ascending=False,
+        )
         sub["Score"] = sub["Score"].map(lambda x: f"{x:.1f}")
 
         st.markdown(f"### {section}")
 
+        display_sub = sub[["Trait Name", "Score"]].copy()
+        display_sub.columns = ["Trait", "Score"]
+
         if section == "Traits":
-            st.dataframe(style_traits_dataframe(sub), use_container_width=True)
+            trait_count = len(display_sub)
+
+            def style_trait_row(row):
+                row_position = display_sub.index.get_loc(row.name)
+
+                if row_position < 5:
+                    return [
+                        "background-color:#e6e6e6;font-weight:bold;",
+                        "background-color:#e6e6e6;font-weight:bold;text-align:center;",
+                    ]
+
+                if row_position >= max(0, trait_count - 5):
+                    return [
+                        "background-color:#fdecea;",
+                        "background-color:#fdecea;text-align:center;",
+                    ]
+
+                return ["", "text-align:center;"]
+
+            table_html = (
+                display_sub.style
+                .apply(style_trait_row, axis=1)
+                .hide(axis="index")
+                .to_html()
+            )
         else:
-            st.dataframe(style_regular_dataframe(sub), use_container_width=True)
+            table_html = display_sub.to_html(
+                index=False,
+                escape=True,
+                classes="hi-table",
+            )
+
+        st.markdown(table_html, unsafe_allow_html=True)
+
+        print(f"END render section: {section}", flush=True)
 
     st.markdown("### Main Graph and Narrative")
 
