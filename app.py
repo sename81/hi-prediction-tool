@@ -735,8 +735,10 @@ if uploaded_file is not None and st.button("Generate"):
         st.session_state.pdf_bytes = f.read()
     print("END PDF read", flush=True)
 
+    print("START session state save", flush=True)
     st.session_state.report_df = report_df
     st.session_state.report_name = report_name
+    print("END session state save", flush=True)
 
 # =========================
 # DISPLAY LAST RESULT
@@ -748,6 +750,8 @@ if st.session_state.report_df is not None:
     st.subheader(f"Results for {display_name}")
 
     for section in SECTION_ORDER:
+        print(f"START display table: {section}", flush=True)
+
         sub = df[df["Section"] == section].copy().sort_values("Score", ascending=False)
         sub["Score"] = sub["Score"].map(lambda x: f"{x:.1f}")
 
@@ -757,6 +761,8 @@ if st.session_state.report_df is not None:
             st.dataframe(style_traits_dataframe(sub), use_container_width=True)
         else:
             st.dataframe(style_regular_dataframe(sub), use_container_width=True)
+
+        print(f"END display table: {section}", flush=True)
 
     st.markdown("### Main Graph and Narrative")
     print("START display charts", flush=True)
