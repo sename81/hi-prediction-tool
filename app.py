@@ -18,7 +18,7 @@ from html import escape
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 st.set_page_config(page_title="Personality Profiling (PP)", layout="wide")
 
@@ -456,11 +456,29 @@ def generate_all_charts(df: pd.DataFrame, output_dir: str):
     return chart_files
 
 
-def add_page_number(canvas, doc):
+def add_page_header_footer(canvas, doc, candidate_name: str):
+    """Add the candidate name at the top-right and the page number at the bottom."""
     page_num = canvas.getPageNumber()
+    display_name = candidate_name.strip() if candidate_name.strip() else "Candidate"
+
+    canvas.saveState()
     canvas.setFont("Helvetica", 9)
     canvas.setFillColor(colors.grey)
-    canvas.drawCentredString(doc.pagesize[0] / 2.0, 18, f"Page {page_num}")
+
+    # Candidate name on every page.
+    canvas.drawRightString(
+        doc.pagesize[0] - doc.rightMargin,
+        doc.pagesize[1] - 22,
+        display_name,
+    )
+
+    # Existing page numbering.
+    canvas.drawCentredString(
+        doc.pagesize[0] / 2.0,
+        18,
+        f"Page {page_num}",
+    )
+    canvas.restoreState()
 
 
 def build_report_dataframe(df_input: pd.DataFrame) -> pd.DataFrame:
@@ -697,7 +715,17 @@ def generate_pdf(
 
     content.append(chart_table)
 
-    doc.build(content, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    page_decorator = lambda canvas, current_doc: add_page_header_footer(
+        canvas,
+        current_doc,
+        display_name,
+    )
+
+    doc.build(
+        content,
+        onFirstPage=page_decorator,
+        onLaterPages=page_decorator,
+    )
     return pdf_path
 
 
