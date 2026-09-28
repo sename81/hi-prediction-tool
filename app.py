@@ -908,7 +908,7 @@ if st.session_state.report_records is not None:
 # DOWNLOAD BUTTON (BOTTOM)
 # =========================
 if st.session_state.pdf_bytes is not None:
-    filename = f"{st.session_state.report_name}_HI_Report.pdf" if st.session_state.report_name else "HI_Report.pdf"
+    filename = f"{st.session_state.report_name}_PP_Report.pdf" if st.session_state.report_name else "HI_Report.pdf"
 
     st.download_button(
         "Download PDF",
